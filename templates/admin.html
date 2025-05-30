@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Panel - Digital Notice Board</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .notice-card {
+            transition: transform 0.2s;
+            margin-bottom: 20px;
+        }
+        .notice-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+        .upload-form {
+            max-width: 600px;
+            margin: 20px auto;
+        }
+        .notice-image {
+            max-height: 400px;
+            object-fit: cover;
+        }
+        .logout-btn {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container py-4">
+        <h1 class="text-center mb-4">Admin Panel</h1>
+        
+        <!-- Upload Form -->
+        <div class="upload-form card p-4">
+            <h3 class="mb-4">Post a Notice</h3>
+            <form id="uploadForm" enctype="multipart/form-data">
+                <div class="mb-3">
+                    <label for="title" class="form-label">Title</label>
+                    <input type="text" class="form-control" id="title" name="title" required>
+                </div>
+                <div class="mb-3">
+                    <label for="description" class="form-label">Description</label>
+                    <textarea class="form-control" id="description" name="description" rows="3"></textarea>
+                </div>
+                <div class="mb-3">
+                    <label for="category" class="form-label">Category</label>
+                    <input type="text" class="form-control" id="category" name="category">
+                </div>
+                <div class="mb-3">
+                    <label for="file" class="form-label">Notice Image</label>
+                    <input type="file" class="form-control" id="file" name="file" accept="image/*" required>
+                </div>
+                <button type="submit" class="btn btn-primary">Post Notice</button>
+            </form>
+        </div>
+
+        <!-- Notices Grid -->
+        <div class="row" id="noticesGrid">
+            {% for notice in notices %}
+            <div class="col-md-4 mb-4">
+                <div class="card notice-card">
+                    <img src="{{ notice.image_path }}" class="card-img-top notice-image" alt="{{ notice.title }}">
+                    <div class="card-body">
+                        <h5 class="card-title">{{ notice.title }}</h5>
+                        {% if notice.description %}
+                        <p class="card-text">{{ notice.description }}</p>
+                        {% endif %}
+                        <p class="card-text text-muted">
+                            <small>Posted: {{ notice.created_at.strftime('%Y-%m-%d %H:%M') }}</small>
+                        </p>
+                        <button class="btn btn-danger btn-sm" onclick="deleteNotice({{ notice.id }})">
+                            <i class="fas fa-trash"></i> Delete
+                        </button>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <a href="/logout" class="btn btn-secondary logout-btn">
+        <i class="fas fa-sign-out-alt"></i> Logout
+    </a>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Handle form submission
+        document.getElementById('uploadForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(this);
+            try {
+                const response = await fetch('/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                const result = await response.json();
+                
+                if (response.ok) {
+                    alert('Notice posted successfully!');
+                    // Refresh the page to show the new notice
+                    window.location.reload();
+                } else {
+                    alert(result.error || 'Error posting notice');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Error posting notice');
+            }
+        });
+
+        // Handle notice deletion
+        async function deleteNotice(noticeId) {
+            if (!confirm('Are you sure you want to delete this notice?')) return;
+            
+            try {
+                const response = await fetch(`/notices/${noticeId}`, {
+                    method: 'DELETE'
+                });
+                const result = await response.json();
+                
+                if (response.ok) {
+                    alert('Notice deleted successfully!');
+                    // Remove the notice from the DOM
+                    const noticeCard = document.querySelector(`[data-notice-id="${noticeId}"]`);
+                    if (noticeCard) noticeCard.remove();
+                } else {
+                    alert(result.error || 'Error deleting notice');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Error deleting notice');
+            }
+        }
+    </script>
+</body>
+</html>
