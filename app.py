@@ -39,6 +39,27 @@ class Notice(db.Model):
             'expires_at': self.expires_at.isoformat() if self.expires_at else None
         }
 
+# Comment model for Q&A system
+class Comment(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    notice_id = db.Column(db.Integer, db.ForeignKey('notice.id'), nullable=False)
+    user_name = db.Column(db.String(100), nullable=False)
+    comment_text = db.Column(db.Text, nullable=False)
+    is_admin_reply = db.Column(db.Boolean, default=False)
+    reply_to_id = db.Column(db.Integer, db.ForeignKey('comment.id'), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def as_dict(self):
+        return {
+            'id': self.id,
+            'notice_id': self.notice_id,
+            'user_name': self.user_name,
+            'comment_text': self.comment_text,
+            'is_admin_reply': self.is_admin_reply,
+            'reply_to_id': self.reply_to_id,
+            'created_at': self.created_at.isoformat()
+        }
+
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in app.config['ALLOWED_EXTENSIONS']
 
@@ -152,10 +173,57 @@ def get_categories():
     categories = db.session.query(Notice.category).distinct().all()
     return jsonify([cat[0] for cat in categories if cat[0]])
 
-@app.route('/notices/<int:notice_id>')
+@app.route('/get_notice/<int:notice_id>', methods=['GET'])
 def get_notice(notice_id):
     notice = Notice.query.get_or_404(notice_id)
-    return jsonify(notice.as_dict())
+    comments = Comment.query.filter_by(notice_id=notice_id).order_by(Comment.created_at.desc()).all()
+    return jsonify({
+        'notice': notice.as_dict(),
+        'comments': [comment.as_dict() for comment in comments]
+    })
+
+@app.route('/post_comment', methods=['POST'])
+def post_comment():
+    data = request.json
+    if not data or not all(key in data for key in ['notice_id', 'user_name', 'comment_text']):
+        return jsonify({'error': 'Missing required fields'}), 400
+    
+    comment = Comment(
+        notice_id=data['notice_id'],
+        user_name=data['user_name'],
+        comment_text=data['comment_text'],
+        is_admin_reply=False,
+        reply_to_id=data.get('reply_to_id')
+    )
+    db.session.add(comment)
+    db.session.commit()
+    return jsonify(comment.as_dict())
+
+@app.route('/post_admin_reply', methods=['POST'])
+def post_admin_reply():
+    if not is_admin():
+        return jsonify({'error': 'Unauthorized'}), 401
+    
+    data = request.json
+    if not data or not all(key in data for key in ['notice_id', 'comment_text', 'reply_to_id']):
+        return jsonify({'error': 'Missing required fields'}), 400
+    
+    reply = Comment(
+        notice_id=data['notice_id'],
+        user_name='Admin',
+        comment_text=data['comment_text'],
+        is_admin_reply=True,
+        reply_to_id=data['reply_to_id']
+    )
+    db.session.add(reply)
+    db.session.commit()
+    return jsonify(reply.as_dict())
+
+@app.route('/view_notice/<int:notice_id>')
+def view_notice(notice_id):
+    notice = Notice.query.get_or_404(notice_id)
+    comments = Comment.query.filter_by(notice_id=notice_id).order_by(Comment.created_at.desc()).all()
+    return render_template('notice_detail.html', notice=notice, comments=comments, is_admin=is_admin)
 
 @app.route('/notices/<int:notice_id>', methods=['DELETE'])
 def delete_notice(notice_id):
